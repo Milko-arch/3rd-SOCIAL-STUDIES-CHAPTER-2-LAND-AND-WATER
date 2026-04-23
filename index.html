@@ -6,10 +6,11 @@
     <title>Social Studies: Chapter 2 Study & Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Bubblegum+Sans&family=Cinzel:wght@700&family=Great+Vibes&display=swap');
+        /* Cambio de fuente a Quicksand */
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&family=Cinzel:wght@700&family=Great+Vibes&display=swap');
         
         body {
-            font-family: 'Bubblegum+Sans', cursive;
+            font-family: 'Quicksand', sans-serif;
             background: #f0f9ff;
             overflow-x: hidden;
         }
@@ -62,7 +63,6 @@
             background: white;
         }
 
-        /* Estilo para cartillas que requieren atención (amarillo) */
         .flashcard.needs-review .flashcard-front {
             border-color: #facc15;
             background-color: #fefce8;
@@ -120,7 +120,6 @@
             color: white !important;
         }
 
-        /* Estilos del Certificado */
         .certificate-container {
             background: #fff;
             border: 20px solid #1e3a8a;
@@ -288,15 +287,13 @@
     </div>
 
     <script>
-        const apiKey = "";
         let studyIdx = 0;
         let currentIdx = 0;
         let correctCount = 0;
         let cardsViewed = new Set();
         let isCardFlipped = false;
-        let missedIndices = new Set(); // Para rastrear qué cartillas falló
+        let missedIndices = new Set(); 
 
-        const audioCache = {};
         const praisePhrases = ["Excellent job!", "You're amazing!", "Great work!", "Keep it up!", "Fantastic!"];
         const retryPhrases = ["Not quite right!", "That is not correct", "Keep trying, you can do it!", "Try one more time!"];
 
@@ -314,72 +311,39 @@
             { term: "Helping the Earth", definition: "Actions we do to protect our planet.", type: "draw", text: "11. FINAL ACTIVITY: Draw an action that people can do to help our environment!", audio: "Draw an action that people can do to help our environment.", icon: "🎨" }
         ];
 
-        // --- PRECARGA ---
-        async function preloadAudio(text) {
-            if (!text || audioCache[text]) return;
-            try { const data = await fetchAudioWithRetry(text); audioCache[text] = data; } catch (e) {}
+        // --- MOTOR DE VOZ: WEB SPEECH API ---
+        function speakText(text) {
+            if (!window.speechSynthesis) return;
+            
+            // Detener cualquier voz previa
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Configurar el idioma a inglés de Estados Unidos
+            utterance.lang = 'en-US';
+            
+            // Buscar una voz específica en-US si está disponible
+            const voices = window.speechSynthesis.getVoices();
+            const usVoice = voices.find(voice => voice.lang === 'en-US' || voice.lang === 'en_US');
+            if (usVoice) utterance.voice = usVoice;
+
+            utterance.pitch = 1.1; // Un poco más agudo para que suene amigable
+            utterance.rate = 0.9;  // Un poco más lento para niños
+            
+            window.speechSynthesis.speak(utterance);
         }
 
-        window.onload = () => {
-            questions.forEach((q, i) => {
-                setTimeout(() => preloadAudio(q.term), i * 100);
-                setTimeout(() => preloadAudio(q.definition), (i + 15) * 100);
-            });
-            setTimeout(() => {
-                praisePhrases.forEach(p => preloadAudio(p));
-                retryPhrases.forEach(p => preloadAudio(p));
-                questions.forEach(q => preloadAudio(q.audio));
-            }, 3000);
+        // Asegurar que las voces carguen (algunos navegadores las cargan asíncronamente)
+        window.speechSynthesis.onvoiceschanged = () => {
+            console.log("Voces del navegador cargadas.");
         };
-
-        // --- TTS ---
-        async function fetchAudioWithRetry(text, retries = 5) {
-            if (audioCache[text]) return audioCache[text];
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: text }] }],
-                            generationConfig: {
-                                responseModalities: ["AUDIO"],
-                                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } }
-                            }
-                        })
-                    });
-                    const result = await response.json();
-                    const audioData = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-                    if (audioData) { audioCache[text] = audioData; return audioData; }
-                } catch (e) { await new Promise(r => setTimeout(r, 1000)); }
-            }
-        }
-
-        function playPCM(base64Data) {
-            if (!base64Data) return;
-            const binaryString = atob(base64Data);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
-            const wavHeader = new ArrayBuffer(44);
-            const view = new DataView(wavHeader);
-            const sampleRate = 24000;
-            view.setUint32(0, 0x52494646, false); view.setUint32(4, 36 + len, true);
-            view.setUint32(8, 0x57415645, false); view.setUint32(12, 0x666d7420, false);
-            view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-            view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
-            view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-            view.setUint32(36, 0x64617461, false); view.setUint32(40, len, true);
-            const url = URL.createObjectURL(new Blob([wavHeader, bytes], { type: 'audio/wav' }));
-            new Audio(url).play();
-        }
 
         // --- STUDY ---
         function startStudy() {
             document.getElementById('welcome-screen').classList.add('hidden');
             document.getElementById('study-section').classList.remove('hidden');
             
-            // Si hay fallos, mostrar aviso
             if (missedIndices.size > 0) {
                 document.getElementById('study-instruction').innerText = "Pay attention to the YELLOW cards! You missed those on the test.";
                 document.getElementById('study-instruction').className = "text-orange-600 font-bold mb-6 animate-pulse";
@@ -401,7 +365,6 @@
             
             container.classList.remove('flipped');
             
-            // Marcar si necesita repaso
             if (missedIndices.has(studyIdx)) {
                 container.classList.add('needs-review');
             } else {
@@ -420,17 +383,16 @@
 
         function nextCard() { if (studyIdx < questions.length - 1) { studyIdx++; renderCard(); } }
         function prevCard() { if (studyIdx > 0) { studyIdx--; renderCard(); } }
+        
         function playStudyAudio() {
             const text = isCardFlipped ? questions[studyIdx].definition : questions[studyIdx].term;
-            if (audioCache[text]) playPCM(audioCache[text]);
-            else fetchAudioWithRetry(text).then(playPCM);
+            speakText(text);
         }
 
         // --- QUIZ ---
         function goToQuiz() {
             document.getElementById('study-section').classList.add('hidden');
             document.getElementById('game-container').classList.remove('hidden');
-            // Resetear progreso de quiz pero mantener missedIndices si venimos de un fallo
             currentIdx = 0;
             correctCount = 0;
             renderQuestion();
@@ -460,9 +422,9 @@
         function submitAnswer(isCorrect, btn) {
             if (isCorrect) {
                 correctCount++;
-                missedIndices.delete(currentIdx); // Si la acertó ahora, quitar de fallidas
+                missedIndices.delete(currentIdx);
             } else {
-                missedIndices.add(currentIdx); // Guardar el índice de la fallida
+                missedIndices.add(currentIdx);
             }
 
             const modal = document.getElementById('feedback-modal');
@@ -478,7 +440,7 @@
                 const phrase = praisePhrases[Math.floor(Math.random() * praisePhrases.length)];
                 msg.innerText = phrase; document.getElementById('feedback-icon').innerText = "🌟";
                 content.className = "bg-white rounded-3xl p-8 text-center max-w-sm w-full border-8 border-green-400";
-                playPCM(audioCache[phrase]);
+                speakText(phrase);
             } else {
                 if (btn) btn.classList.add('wrong-answer');
                 document.getElementById('main-card').classList.add('shake-animation');
@@ -486,7 +448,7 @@
                 const phrase = retryPhrases[Math.floor(Math.random() * retryPhrases.length)];
                 msg.innerText = phrase; document.getElementById('feedback-icon').innerText = "🚀";
                 content.className = "bg-white rounded-3xl p-8 text-center max-w-sm w-full border-8 border-red-400";
-                playPCM(audioCache[phrase]);
+                speakText(phrase);
             }
             
             modal.classList.remove('hidden');
@@ -501,8 +463,7 @@
 
         function playCurrentAudio() {
             const text = questions[currentIdx].audio;
-            if (audioCache[text]) playPCM(audioCache[text]);
-            else fetchAudioWithRetry(text).then(playPCM);
+            speakText(text);
         }
 
         // --- FINAL SEQUENCES ---
@@ -545,12 +506,10 @@
         function handleRestart() {
             const percent = Math.round((correctCount / questions.length) * 100);
             if (percent < 80) {
-                // Ir a repasar (solo cartillas amarillas)
                 document.getElementById('final-screen').classList.add('hidden');
                 studyIdx = 0;
                 startStudy();
             } else {
-                // Reiniciar todo
                 location.reload();
             }
         }
@@ -564,7 +523,6 @@
             spawnCandies();
         }
 
-        // --- UTILS ---
         function spawnCandies() {
             const emojis = ['🍬', '🍭', '✨', '🌍', '🏅', '⭐'];
             for (let i = 0; i < 30; i++) {
