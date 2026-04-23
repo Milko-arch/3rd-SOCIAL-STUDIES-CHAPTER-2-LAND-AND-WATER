@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Social Studies: Chapter 2 Study & Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería para generar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         /* Cambio de fuente a Quicksand */
         @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&family=Cinzel:wght@700&family=Great+Vibes&display=swap');
@@ -131,6 +133,21 @@
         .cert-title { font-family: 'Cinzel', serif; }
         .cert-name { font-family: 'Great Vibes', cursive; border-bottom: 2px solid #1e3a8a; }
         .cert-decoration { position: absolute; opacity: 0.1; font-size: 10rem; pointer-events: none; }
+
+        /* Estilo para el control de velocidad */
+        .speed-control {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px 12px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 2px solid #e2e8f0;
+        }
+        input[type=range] {
+            cursor: pointer;
+            width: 80px;
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -152,9 +169,16 @@
         <div id="study-section" class="hidden text-center">
             <header class="flex justify-between items-center mb-4">
                 <h2 class="text-4xl text-blue-600">Study Cards</h2>
-                <button id="study-audio-btn" onclick="playStudyAudio()" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full flex items-center gap-2 shadow-lg transition-all">
-                    <span>🔊 Listen</span>
-                </button>
+                <div class="flex items-center gap-3">
+                    <div class="speed-control">
+                        <span class="text-xl">🐢</span>
+                        <input type="range" min="0.3" max="1.2" step="0.1" value="0.7" oninput="updateSpeechRate(this.value)">
+                        <span class="text-xl">🐰</span>
+                    </div>
+                    <button id="study-audio-btn" onclick="playStudyAudio()" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full flex items-center gap-2 shadow-lg transition-all">
+                        <span>🔊 Listen</span>
+                    </button>
+                </div>
             </header>
             <p id="study-instruction" class="text-gray-500 mb-6">Click the card to see the answer!</p>
             
@@ -192,9 +216,16 @@
                 <div>
                     <h3 id="progress-text" class="text-2xl text-blue-500">Question 1/11</h3>
                 </div>
-                <button id="audio-btn" onclick="playCurrentAudio()" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full flex items-center gap-2 shadow-lg transition-all">
-                    <span>🔊 Listen</span>
-                </button>
+                <div class="flex items-center gap-3">
+                    <div class="speed-control">
+                        <span class="text-xl">🐢</span>
+                        <input type="range" min="0.3" max="1.2" step="0.1" value="0.7" oninput="updateSpeechRate(this.value)">
+                        <span class="text-xl">🐰</span>
+                    </div>
+                    <button id="audio-btn" onclick="playCurrentAudio()" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full flex items-center gap-2 shadow-lg transition-all">
+                        <span>🔊 Listen</span>
+                    </button>
+                </div>
             </header>
 
             <div id="question-area" class="min-h-[400px]">
@@ -232,7 +263,7 @@
 
             <!-- Certificado (Solo si > 80%) -->
             <div id="certificate-area" class="hidden mb-10 overflow-hidden">
-                <div class="certificate-container text-center border-double border-8 border-blue-900 shadow-2xl">
+                <div id="certificate-to-download" class="certificate-container text-center border-double border-8 border-blue-900 shadow-2xl">
                     <div class="cert-decoration top-0 left-0">🌍</div>
                     <div class="cert-decoration bottom-0 right-0">🗺️</div>
                     <div class="cert-decoration top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.05]">🏅</div>
@@ -263,7 +294,10 @@
                         </div>
                     </div>
                 </div>
-                <button onclick="window.print()" class="mt-6 bg-gray-600 text-white px-6 py-2 rounded-full text-sm">🖨️ Print Certificate</button>
+                <div class="flex justify-center gap-4 mt-6">
+                    <button onclick="window.print()" class="bg-gray-600 text-white px-6 py-2 rounded-full text-sm">🖨️ Print View</button>
+                    <button onclick="downloadPDF()" class="bg-blue-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg hover:bg-blue-800 transition-all">📥 Download PDF</button>
+                </div>
             </div>
 
             <div id="final-actions">
@@ -293,6 +327,7 @@
         let cardsViewed = new Set();
         let isCardFlipped = false;
         let missedIndices = new Set(); 
+        let speechRate = 0.7; // Velocidad de lectura global
 
         const praisePhrases = ["Excellent job!", "You're amazing!", "Great work!", "Keep it up!", "Fantastic!"];
         const retryPhrases = ["Not quite right!", "That is not correct", "Keep trying, you can do it!", "Try one more time!"];
@@ -312,6 +347,10 @@
         ];
 
         // --- MOTOR DE VOZ: WEB SPEECH API ---
+        function updateSpeechRate(val) {
+            speechRate = parseFloat(val);
+        }
+
         function speakText(text) {
             if (!window.speechSynthesis) return;
             
@@ -329,7 +368,7 @@
             if (usVoice) utterance.voice = usVoice;
 
             utterance.pitch = 1.1; // Un poco más agudo para que suene amigable
-            utterance.rate = 0.9;  // Un poco más lento para niños
+            utterance.rate = speechRate;  // Velocidad dinámica
             
             window.speechSynthesis.speak(utterance);
         }
@@ -521,6 +560,22 @@
             document.getElementById('cert-display-score').innerText = `${score}%`;
             document.getElementById('cert-date').innerText = new Date().toLocaleDateString();
             spawnCandies();
+        }
+
+        // Función para descargar el PDF del diploma
+        function downloadPDF() {
+            const element = document.getElementById('certificate-to-download');
+            const studentName = document.getElementById('cert-display-name').innerText;
+            const opt = {
+                margin: 10,
+                filename: `Certificate_${studentName}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+            };
+
+            // Ejecutar la generación del PDF
+            html2pdf().set(opt).from(element).save();
         }
 
         function spawnCandies() {
